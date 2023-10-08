@@ -57,8 +57,24 @@ static void test_parse_root_not_singular() {
     EXPECT_EQ_INT(tinyjson_NULL, get_type(&v));
 }
 
+static void test_parse_true(){
+    tinyjson_value v;
+    v.type = tinyjson_FALSE;
+    EXPECT_EQ_INT(PARSE_OK,parse(&v,"true"));
+    EXPECT_EQ_INT(tinyjson_TRUE,get_type(&v));
+}
+
+static void test_parse_false(){
+    tinyjson_value v;
+    v.type = tinyjson_TRUE;
+    EXPECT_EQ_INT(PARSE_OK,parse(&v,"false"));
+    EXPECT_EQ_INT(tinyjson_FALSE,get_type(&v));
+}
+
 static void test_parse() {
     test_parse_null();
+    test_parse_true();
+    test_parse_false();
     test_parse_expect_value();
     test_parse_invalid_value();
     test_parse_root_not_singular();
