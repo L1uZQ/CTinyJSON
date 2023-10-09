@@ -68,7 +68,7 @@ static void test_parse_invalid_value() {
     EXPECT_EQ_INT(PARSE_INVALID_VALUE, parse(&v, "?"));
     EXPECT_EQ_INT(tinyjson_NULL, get_type(&v));
 
-    #if 0
+    #if 1
         /* ... */
     /* invalid number */
     TEST_ERROR(PARSE_INVALID_VALUE, "+0");
@@ -123,8 +123,17 @@ static void test_parse_number(){
     TEST_NUMBER(1.234E+10, "1.234E+10");
     TEST_NUMBER(1.234E-10, "1.234E-10");
     TEST_NUMBER(0.0, "1e-10000"); /* must underflow */
+
+    //边界值测试
 }
 
+
+static void test_parse_number_too_big() {
+#if 1
+    TEST_ERROR(PARSE_NUMBER_TOO_BIG, "1e309");
+    TEST_ERROR(PARSE_NUMBER_TOO_BIG, "-1e309");
+#endif
+}
 
 
 static void test_parse() {
@@ -134,6 +143,7 @@ static void test_parse() {
     test_parse_expect_value();
     test_parse_invalid_value();
     test_parse_root_not_singular();
+    test_parse_number_too_big();
 }
 
 int main() {

@@ -1,8 +1,13 @@
 #include"ctinyjson.h"
 #include<assert.h>
 #include<stdlib.h>
+#include<errno.h>
+#include<math.h>
 
 #define EXPECT(c, ch)   do { assert(*c->json == (ch)); c->json++; } while(0)
+
+#define ISDIGIT(ch)   ((ch)>='0' && (ch)<='9')
+#define ISDIGIT1TO9(ch)  ((ch)>='1' && (ch)<='9')
 
 typedef struct{
     const char *json;
@@ -16,6 +21,7 @@ static void parse_whitespace(tinyjson_context *c){
     c->json = p;
 }
 
+// null、false、true的解析合成一个函数，通过传入参数区分
 static int parse_literal(tinyjson_context* c, tinyjson_value* v,
     const char* literal,tinyjson_type type)
 {
@@ -62,14 +68,41 @@ static int parse_literal(tinyjson_context* c, tinyjson_value* v,
 
 
 static int parse_number(tinyjson_context* c, tinyjson_value* v){
-    char *end;
-    v->n = strtod(c->json, &end);
-    if(c->json == end){
-        return PARSE_INVALID_VALUE;
+    const char *p = c->json;
+    if(*p == '-') p++;
+    if(*p == '0') p++;
+    else{
+        if(!ISDIGIT(*p)) return PARSE_INVALID_VALUE;
+        while(ISDIGIT(*p)) p++;
     }
-    c->json = end;
+    if(*p =='.'){
+        p++;
+        if(!ISDIGIT(*p)) return PARSE_INVALID_VALUE;
+        while(ISDIGIT(*p)) p++;
+    }
+    if(*p == 'e' || *p=='E'){
+        p++;
+        if(*p == '+' || *p== '-') p++;
+        if(!ISDIGIT(*p)) return PARSE_INVALID_VALUE;
+        while(ISDIGIT(*p)) p++;
+    }
+    errno = 0;
+    v->n = strtod(c->json,NULL);
+    if(errno == ERANGE && (v->n == HUGE_VAL) || v->n == -HUGE_VAL){
+        return PARSE_NUMBER_TOO_BIG;
+    }
     v->type = tinyjson_NUMBER;
+    c->json = p;
     return PARSE_OK;
+
+    // char *end;
+    // v->n = strtod(c->json, &end);
+    // if(c->json == end){
+    //     return PARSE_INVALID_VALUE;
+    // }
+    // c->json = end;
+    // v->type = tinyjson_NUMBER;
+    // return PARSE_OK;
 }
 
 static int parse_value(tinyjson_context* c, tinyjson_value* v){
