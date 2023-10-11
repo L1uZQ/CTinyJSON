@@ -50,6 +50,7 @@ static void test_parse_null() {
     v.type = tinyjson_FALSE;
     EXPECT_EQ_INT(PARSE_OK, parse(&v, "null"));
     EXPECT_EQ_INT(tinyjson_NULL, get_type(&v));
+    tinyjson_free(&v);
 }
 
 static void test_parse_expect_value() {
@@ -62,6 +63,7 @@ static void test_parse_expect_value() {
     v.type = tinyjson_FALSE;
     EXPECT_EQ_INT(PARSE_EXPECT_VALUE, parse(&v, " "));
     EXPECT_EQ_INT(tinyjson_NULL, get_type(&v));
+    tinyjson_free(&v);
 }
 
 static void test_parse_invalid_value() {
@@ -129,7 +131,6 @@ static void test_parse_number(){
     TEST_NUMBER(1.234E+10, "1.234E+10");
     TEST_NUMBER(1.234E-10, "1.234E-10");
     TEST_NUMBER(0.0, "1e-10000"); /* must underflow */
-
     //边界值测试
 }
 
@@ -157,6 +158,15 @@ static void test_parse_string() {
     TEST_STRING("Hello", "\"Hello\"");
     TEST_STRING("Hello\nWorld", "\"Hello\\nWorld\"");
     TEST_STRING("\" \\ / \b \f \n \r \t", "\"\\\" \\\\ \\/ \\b \\f \\n \\r \\t\"");
+
+    #if 0
+    TEST_STRING("Hello\0World", "\"Hello\\u0000World\"");
+    TEST_STRING("\x24", "\"\\u0024\"");         /* Dollar sign U+0024 */
+    TEST_STRING("\xC2\xA2", "\"\\u00A2\"");     /* Cents sign U+00A2 */
+    TEST_STRING("\xE2\x82\xAC", "\"\\u20AC\""); /* Euro sign U+20AC */
+    TEST_STRING("\xF0\x9D\x84\x9E", "\"\\uD834\\uDD1E\"");  /* G clef sign U+1D11E */
+    TEST_STRING("\xF0\x9D\x84\x9E", "\"\\ud834\\udd1e\"");  /* G clef sign U+1D11E */
+    #endif
 }
 
 
@@ -175,6 +185,29 @@ static void test_parse_invalid_string_escape() {
 static void test_parse_invalid_string_char() {
     TEST_ERROR(PARSE_INVALID_STRING_CHAR, "\"\x01\"");
     TEST_ERROR(PARSE_INVALID_STRING_CHAR, "\"\x1F\"");
+}
+
+static void test_parse_invalid_unicode_hex() {
+    TEST_ERROR(PARSE_INVALID_UNICODE_HEX, "\"\\u\"");
+    TEST_ERROR(PARSE_INVALID_UNICODE_HEX, "\"\\u0\"");
+    TEST_ERROR(PARSE_INVALID_UNICODE_HEX, "\"\\u01\"");
+    TEST_ERROR(PARSE_INVALID_UNICODE_HEX, "\"\\u012\"");
+    TEST_ERROR(PARSE_INVALID_UNICODE_HEX, "\"\\u/000\"");
+    TEST_ERROR(PARSE_INVALID_UNICODE_HEX, "\"\\uG000\"");
+    TEST_ERROR(PARSE_INVALID_UNICODE_HEX, "\"\\u0/00\"");
+    TEST_ERROR(PARSE_INVALID_UNICODE_HEX, "\"\\u0G00\"");
+    TEST_ERROR(PARSE_INVALID_UNICODE_HEX, "\"\\u00/0\"");
+    TEST_ERROR(PARSE_INVALID_UNICODE_HEX, "\"\\u00G0\"");
+    TEST_ERROR(PARSE_INVALID_UNICODE_HEX, "\"\\u000/\"");
+    TEST_ERROR(PARSE_INVALID_UNICODE_HEX, "\"\\u000G\"");
+}
+
+static void test_parse_invalid_unicode_surrogate() {
+    TEST_ERROR(PARSE_INVALID_UNICODE_SURROGATE, "\"\\uD800\"");
+    TEST_ERROR(PARSE_INVALID_UNICODE_SURROGATE, "\"\\uDBFF\"");
+    TEST_ERROR(PARSE_INVALID_UNICODE_SURROGATE, "\"\\uD800\\\\\"");
+    TEST_ERROR(PARSE_INVALID_UNICODE_SURROGATE, "\"\\uD800\\uDBFF\"");
+    TEST_ERROR(PARSE_INVALID_UNICODE_SURROGATE, "\"\\uD800\\uE000\"");
 }
 
 
@@ -226,6 +259,7 @@ static void test_parse() {
     test_parse_invalid_value();
     test_parse_root_not_singular();
     test_parse_number_too_big();
+    test_parse_string();
 
     test_parse_missing_quotation_mark();
     test_parse_invalid_string_escape();
@@ -235,6 +269,9 @@ static void test_parse() {
     test_access_boolean();
     test_access_number();
     test_access_string();
+
+    test_parse_invalid_unicode_hex();
+    test_parse_invalid_unicode_surrogate();
 }
 
 int main() {
