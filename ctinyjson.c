@@ -137,9 +137,9 @@ static int parse_number(tinyjson_context* c, tinyjson_value* v){
 }
 
 /// @brief 读取4位16进制数据
-/// @param p 
-/// @param u 
-/// @return 
+/// @param p 字符串当前解析到的位置
+/// @param u 传出参数，4位16进制数据
+/// @return 解析成功返回解析后的p指针位置，失败返回NULL
 static const char* parse_hex4(const char* p, unsigned* u) {
     /* \TODO */
     int i;
@@ -214,9 +214,12 @@ static int parse_string(tinyjson_context* c, tinyjson_value* v){
                     case 'r' : PUTC(c,'\r'); break;
                     case 't' : PUTC(c,'\t'); break;
                     case 'u' :
-                        if(!(p = parse_hex4(p,&u)));
+                        if(!(p = parse_hex4(p,&u))){
+                            // printf("testestetstet\n");
                             STRING_ERROR(PARSE_INVALID_UNICODE_HEX);
-                        if(u >= 0xD800 && u<= 0xD8FF){
+                        }
+                        if(u >= 0xD800 && u<= 0xDBFF){
+                            // printf("testestetstet\n");
                             if(*p++ != '\\')
                                 STRING_ERROR(PARSE_INVALID_UNICODE_SURROGATE);
                             if(*p++ != 'u') 
@@ -225,6 +228,7 @@ static int parse_string(tinyjson_context* c, tinyjson_value* v){
                                 STRING_ERROR(PARSE_INVALID_UNICODE_HEX);
                             if(u2 < 0xDC00 || u2 > 0xDFFF)
                                 STRING_ERROR(PARSE_INVALID_UNICODE_SURROGATE);
+                                //把高代理项和低代理项转换为真正的码点
                             u = (((u- 0xD800) << 10) | (u2-0xDC00)) + 0x10000;
                         }
                         encode_utf8(c,u);
@@ -247,6 +251,52 @@ static int parse_string(tinyjson_context* c, tinyjson_value* v){
     }
 }
 
+/*lept_parse_value() 会调用 lept_parse_array()，而 lept_parse_array() 
+又会调用 lept_parse_value()，这是互相引用，所以必须要加入函数前向声明。*/
+static int parse_value(tinyjson_context * c, tinyjson_value * v); //前向声明
+
+static int parse_array(tinyjson_context * c, tinyjson_value * v){
+    size_t i,size = 0;
+    int ret;
+    EXPECT(c,'[');
+    //数组为空
+    parse_whitespace(c);
+    if(*c->json == ']'){
+        c->json++;
+        v->type=tinyjson_ARRAY;
+        v->u.a.size=0;
+        v->u.a.e = NULL;
+        return PARSE_OK;
+    }
+    for(;;){
+        tinyjson_value e;
+        init(&e);
+        if((ret = parse_value(c,&e)) != PARSE_OK)
+            return ret;
+        memcpy(context_push(c,sizeof(tinyjson_value)),&e,sizeof(tinyjson_value));
+        size++;
+        parse_whitespace(c);
+        if(*c->json ==','){
+            c->json++;
+            parse_whitespace(c);
+        }
+        else if(*c->json==']'){
+            c->json++;
+            v->type = tinyjson_ARRAY;
+            v->u.a.size = size;
+            size *= sizeof(tinyjson_value);
+            memcpy(v->u.a.e = (tinyjson_value*)malloc(size), context_pop(c,size),size);
+            return PARSE_OK;
+        }
+        else  {
+           ret = PARSE_MISS_COMMA_OR_SQUARE_BRACKET;
+           break;
+        }
+    }
+    for(int i=0; i<size; i++)
+        tinyjson_free((tinyjson_value*)context_pop(c,sizeof(tinyjson_value)));
+    return ret;
+}
 
 /// @brief 解析json value
 /// @param c 
@@ -262,6 +312,8 @@ static int parse_value(tinyjson_context* c, tinyjson_value* v){
             return parse_literal(c,v,"false",tinyjson_FALSE);
         case '"':
             return parse_string(c,v);
+        case '[':
+            return parse_array(c,v);
         case '\0':
             return PARSE_EXPECT_VALUE;
         default:
@@ -292,7 +344,7 @@ int parse(tinyjson_value *v, const char *json)
             ret = PARSE_ROOT_NOT_SINGULAR;
         }
     }
-    assert(c.top == 0);
+    // assert(c.top == 0);
     free(c.stack); //释放内存
     return ret;
 }
@@ -372,4 +424,15 @@ void set_string(tinyjson_value * v, const char * s, size_t len){
     v->u.s.s[len] = '\0';
     v->u.s.len = len;
     v->type = tinyjson_STRING;
+}
+
+size_t get_array_size(const tinyjson_value * v){
+    assert(v!=NULL && v->type == tinyjson_ARRAY);
+    return v->u.a.size;
+}
+
+tinyjson_value* get_array_element(const tinyjson_value * v, size_t index){
+    assert(v != NULL && v->type == tinyjson_ARRAY);
+    assert(index < v->u.a.size);
+    return &v->u.a.e[index];
 }

@@ -8,16 +8,18 @@ typedef enum{
                 tinyjson_STRING,tinyjson_ARRAY,tinyjson_OBJECT
 }tinyjson_type;
 
+typedef struct tinyjson_value tinyjson_value;
 
 //tinyjson的数据结构为树，每个节点用tinyjson_value表示
-typedef struct{
+struct tinyjson_value{
     /// @brief 一个值不可能同时为字符串和数字，因此用union定义节省内存
     union{
         struct {char *s; size_t len;}s; //字符串
+        struct {tinyjson_value *e; size_t size}a; //数组
         double n;
     }u; 
     tinyjson_type type;
-}tinyjson_value;
+};
 
 enum {
     PARSE_OK = 0,
@@ -29,7 +31,8 @@ enum {
     PARSE_INVALID_STRING_ESCAPE,
     PARSE_INVALID_STRING_CHAR,
     PARSE_INVALID_UNICODE_HEX,
-    PARSE_INVALID_UNICODE_SURROGATE
+    PARSE_INVALID_UNICODE_SURROGATE,
+    PARSE_MISS_COMMA_OR_SQUARE_BRACKET
 };
 
 #define set_null(v) tinyjson_free(v)
@@ -49,5 +52,9 @@ void set_number(tinyjson_value* v, double n);
 const char* get_string(const tinyjson_value* v);
 size_t get_string_length(const tinyjson_value* v);
 void set_string(tinyjson_value* v, const char* s, size_t len);
+
+size_t get_array_size(const tinyjson_value* v);
+tinyjson_value* get_array_element(const tinyjson_value* v, size_t index);
+
 
 #endif
