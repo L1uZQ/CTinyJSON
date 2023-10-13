@@ -293,6 +293,7 @@ static int parse_array(tinyjson_context * c, tinyjson_value * v){
            break;
         }
     }
+    
     for(int i=0; i<size; i++)
         tinyjson_free((tinyjson_value*)context_pop(c,sizeof(tinyjson_value)));
     return ret;
@@ -344,7 +345,7 @@ int parse(tinyjson_value *v, const char *json)
             ret = PARSE_ROOT_NOT_SINGULAR;
         }
     }
-    // assert(c.top == 0);
+    assert(c.top == 0);
     free(c.stack); //释放内存
     return ret;
 }
@@ -354,9 +355,20 @@ int parse(tinyjson_value *v, const char *json)
 /// @param v 
 void tinyjson_free(tinyjson_value *v){
     assert(v != NULL);
-    if(v->type == tinyjson_STRING) 
-        free(v->u.s.s);
-    
+    switch(v->type){
+        case tinyjson_STRING:
+            free(v->u.s.s);
+            break;
+        case tinyjson_ARRAY:
+            for(size_t i=0; i<v->u.a.size; i++){
+                //数组内的元素通过递归调用释放
+                tinyjson_free(&v->u.a.e[i]);
+            }
+            free(v->u.a.e);
+            break;
+        default:
+            break;
+    }
     v->type = tinyjson_NULL;
 }
 

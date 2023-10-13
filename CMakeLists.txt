@@ -3,6 +3,7 @@ project (ctinyjson_test C)
 set(CMAKE_C_FLAGS "-std=c11")
 
 # add_library(ctinyjson ctinyjson.c)
+include_directories(.)
 add_executable(ctinyjson_test  test.c  ctinyjson.c)
 # target_link_libraries(ctinyjson_test ctinyjson)
 set_target_properties(ctinyjson_test PROPERTIES COMPILE_FLAGS "-g")

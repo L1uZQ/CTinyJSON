@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "ctinyjson.h"
+// #include "ctinyjson.c"
 
 static int main_ret = 0;
 static int test_count = 0;
@@ -230,12 +231,42 @@ static void test_parse_invalid_unicode_surrogate() {
 }
 
 static void test_parse_array() {
+    size_t i,j;
     tinyjson_value v;
 
     init(&v);
     EXPECT_EQ_INT(PARSE_OK, parse(&v, "[ ]"));
     EXPECT_EQ_INT(tinyjson_ARRAY, get_type(&v));
     EXPECT_EQ_SIZE_T(0, get_array_size(&v));
+    tinyjson_free(&v);
+
+    init(&v);
+    EXPECT_EQ_INT(PARSE_OK, parse(&v,"[ null , false ,true, 123, \"abc\"]"));
+    EXPECT_EQ_INT(tinyjson_ARRAY, get_type(&v));
+    EXPECT_EQ_SIZE_T(5, get_array_size(&v));
+    EXPECT_EQ_INT(tinyjson_NULL, get_type(get_array_element(&v,0)));
+    EXPECT_EQ_INT(tinyjson_FALSE, get_type(get_array_element(&v,1)));
+    EXPECT_EQ_INT(tinyjson_TRUE, get_type(get_array_element(&v,2)));
+    EXPECT_EQ_INT(tinyjson_NUMBER, get_type(get_array_element(&v,3)));
+    EXPECT_EQ_INT(tinyjson_STRING, get_type(get_array_element(&v,4)));
+    EXPECT_EQ_DOUBLE(123.0, get_number(get_array_element(&v,3)));
+    EXPECT_EQ_STRING("abc",get_string(get_array_element(&v,4)), get_string_length(get_array_element(&v,4)));
+    tinyjson_free(&v);
+
+    init(&v);
+    EXPECT_EQ_INT(PARSE_OK, parse(&v,"[ [], [0] ,[0,1], [ 0,   1, 2]]"));
+    EXPECT_EQ_INT(tinyjson_ARRAY, get_type(&v));
+    EXPECT_EQ_SIZE_T(4, get_array_size(&v));
+    for(int i=0; i<4; i++){
+        tinyjson_value *a = get_array_element(&v, i);
+        EXPECT_EQ_INT(tinyjson_ARRAY,get_type(a));
+        EXPECT_EQ_SIZE_T(i, get_array_size(a));
+        for(int j=0; j<i; j++){
+            tinyjson_value *b = get_array_element(a,j);
+            EXPECT_EQ_INT(tinyjson_NUMBER,get_type(b));
+            EXPECT_EQ_DOUBLE((double)j, get_number(b));
+        }
+    }
     tinyjson_free(&v);
 }
 
