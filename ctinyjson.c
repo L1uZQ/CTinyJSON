@@ -184,12 +184,87 @@ static void encode_utf8(tinyjson_context* c, unsigned u) {
 #define STRING_ERROR(ret) do { c->top = head; return ret; } while(0)
 
 
+static int parse_string_raw(tinyjson_context* c, char** str, size_t* len){
+    size_t head = c->top;
+    unsigned u, u2;
+    const char *p;
+    EXPECT(c, '\"');
+    p = c->json;
+    for(; ; ){
+        char ch = *p++;
+        switch(ch){
+            case '\"':  //如果是 ",字符串结束
+                *len = c->top - head;
+                *str = (const char*)context_pop(c,*len);
+                // set_string(v,(const char*)context_pop(c,len),len);
+                c->json = p;
+                return PARSE_OK;
+            case '\\':
+                switch(*p++){
+                    case '\"': PUTC(c,'\"'); break;
+                    case '\\': PUTC(c,'\\'); break;
+                    case '/' : PUTC(c,'/'); break;
+                    case 'b' : PUTC(c,'\b'); break;
+                    case 'f' : PUTC(c,'\f'); break;
+                    case 'n' : PUTC(c,'\n'); break;
+                    case 'r' : PUTC(c,'\r'); break;
+                    case 't' : PUTC(c,'\t'); break;
+                    case 'u' :
+                        if(!(p = parse_hex4(p,&u))){
+                            // printf("testestetstet\n");
+                            STRING_ERROR(PARSE_INVALID_UNICODE_HEX);
+                        }
+                        if(u >= 0xD800 && u<= 0xDBFF){
+                            // printf("testestetstet\n");
+                            if(*p++ != '\\')
+                                STRING_ERROR(PARSE_INVALID_UNICODE_SURROGATE);
+                            if(*p++ != 'u') 
+                                STRING_ERROR(PARSE_INVALID_UNICODE_SURROGATE);
+                            if(!(p = parse_hex4(p,&u2)))
+                                STRING_ERROR(PARSE_INVALID_UNICODE_HEX);
+                            if(u2 < 0xDC00 || u2 > 0xDFFF)
+                                STRING_ERROR(PARSE_INVALID_UNICODE_SURROGATE);
+                                //把高代理项和低代理项转换为真正的码点
+                            u = (((u- 0xD800) << 10) | (u2-0xDC00)) + 0x10000;
+                        }
+                        encode_utf8(c,u);
+                        break;
+                    default:
+                        c->top = head;
+                        return PARSE_INVALID_STRING_ESCAPE;
+                }
+                break;
+            case '\0': //如果是空字符
+                c->top = head;
+                return PARSE_MISS_QUOTATION_MARK;
+            default:
+                if((unsigned char)ch < 0x20){
+                    c->top = head;
+                    return PARSE_INVALID_STRING_CHAR;
+                }
+                PUTC(c,ch);
+        }
+    }
+}
+
+
+static parse_string(tinyjson_context* c, tinyjson_value* v){
+    int ret;
+    char *s;
+    size_t len;
+    if((ret = parse_string_raw(c,&s,&len)) == PARSE_OK){
+        set_string(v,s,len);
+    }
+    return ret;
+}
+
+
 
 /// @brief 解析字符串
 /// @param c 
 /// @param v 
 /// @return 
-static int parse_string(tinyjson_context* c, tinyjson_value* v){
+static int parse_string_cp(tinyjson_context* c, tinyjson_value* v){
     size_t head = c->top, len;
     unsigned u, u2;
     const char *p;
@@ -319,13 +394,53 @@ static int parse_object(tinyjson_context * c, tinyjson_value * v){
     m.k=NULL;
     size=0;
     for(;;){
+        char *str;
         init(&m.v);
+        if(*c->json != '"'){
+            ret = PARSE_MISS_KEY;
+            break;
+        }
+        if((ret = parse_string_raw(c,&str,&m.klen))!=PARSE_OK){
+            break;
+        }
+        memcpy(m.k = (char *)malloc(m.klen+1),str,m.klen);
+        m.k[m.klen]='\0';
+        parse_whitespace(c);
+        if(*c->json!=':'){
+            ret = PARSE_MISS_COLON;
+            break;
+        }
+        c->json++;
+        parse_whitespace(c);
+
         if((ret = parse_value(c,&m.v)) != PARSE_OK)
             break;
         memcpy(context_push(c,sizeof(tinyjson_member)),&m,sizeof(tinyjson_member));
         size++;
         m.k=NULL;
+        parse_whitespace(c);
+        if(*c->json==','){
+            c->json++;
+            parse_whitespace(c);
+        }else if(*c->json=='}'){
+            size_t s = sizeof(tinyjson_member) * size;
+            c->json++;
+            v->type = tinyjson_OBJECT;
+            v->u.o.size = size;
+            memcpy(v->u.o.m=(tinyjson_member*)malloc(s),context_pop(c,s),s);
+            return PARSE_OK;
+        }else{
+            ret = PARSE_MISS_COMMA_OR_CURLY_BRACKET;
+            break;
+        }
     }
+    free(m.k);
+    for(int i=0; i<size; i++){
+        tinyjson_member* m = (tinyjson_member*)context_pop(c, sizeof(tinyjson_member));
+        free(m->k);
+        tinyjson_free(&m->v);
+    }
+    v->type=tinyjson_NULL;
     return ret;
 }
 
@@ -398,6 +513,13 @@ void tinyjson_free(tinyjson_value *v){
                 tinyjson_free(&v->u.a.e[i]);
             }
             free(v->u.a.e);
+            break;
+        case tinyjson_OBJECT:
+            for(int i=0; i<v->u.o.size; i++){
+                free(v->u.o.m[i].k);
+                tinyjson_free(&v->u.o.m[i].v);
+            }
+            free(v->u.o.m);
             break;
         default:
             break;
