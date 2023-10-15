@@ -299,6 +299,37 @@ static int parse_array(tinyjson_context * c, tinyjson_value * v){
     return ret;
 }
 
+/// @brief 解析json对象
+/// @param c 
+/// @param v 
+/// @return 
+static int parse_object(tinyjson_context * c, tinyjson_value * v){
+    size_t size;
+    tinyjson_member m;
+    int ret;
+    EXPECT(c,'{');
+    parse_whitespace(c);
+    if(*c->json == '}'){
+        c->json++;
+        v->type = tinyjson_OBJECT;
+        v->u.o.m=0;
+        v->u.o.size=0;
+        return PARSE_OK;
+    }
+    m.k=NULL;
+    size=0;
+    for(;;){
+        init(&m.v);
+        if((ret = parse_value(c,&m.v)) != PARSE_OK)
+            break;
+        memcpy(context_push(c,sizeof(tinyjson_member)),&m,sizeof(tinyjson_member));
+        size++;
+        m.k=NULL;
+    }
+    return ret;
+}
+
+
 /// @brief 解析json value
 /// @param c 
 /// @param v 
@@ -315,6 +346,8 @@ static int parse_value(tinyjson_context* c, tinyjson_value* v){
             return parse_string(c,v);
         case '[':
             return parse_array(c,v);
+        case '{':
+            return parse_object(c,v);
         case '\0':
             return PARSE_EXPECT_VALUE;
         default:
@@ -337,7 +370,7 @@ int parse(tinyjson_value *v, const char *json)
     c.stack = NULL;
     c.size = c.top = 0;
     init(v);
-    v->type = tinyjson_NULL;
+    // v->type = tinyjson_NULL;
     parse_whitespace(&c);
     if((ret=parse_value(&c,v)) == PARSE_OK){
         parse_whitespace(&c);
@@ -447,4 +480,27 @@ tinyjson_value* get_array_element(const tinyjson_value * v, size_t index){
     assert(v != NULL && v->type == tinyjson_ARRAY);
     assert(index < v->u.a.size);
     return &v->u.a.e[index];
+}
+
+size_t get_object_size(const tinyjson_value* v){
+    assert(v != NULL && v->type == tinyjson_OBJECT);
+    return v->u.o.size;
+}
+
+const char* get_object_key(const tinyjson_value* v, size_t index){
+    assert(v != NULL && v->type == tinyjson_OBJECT);
+    assert(index < v->u.o.size);
+    return v->u.o.m[index].k;
+}
+
+size_t get_object_key_length(const tinyjson_value* v, size_t index){
+    assert(v != NULL && v->type == tinyjson_OBJECT);
+    assert(index < v->u.o.size);
+    return v->u.o.m[index].klen;
+}
+
+tinyjson_value * get_object_value(const tinyjson_value* v, size_t index){
+    assert(v != NULL && v->type == tinyjson_OBJECT);
+    assert(index < v->u.o.size);
+    return &v->u.o.m[index].v;
 }

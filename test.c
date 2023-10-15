@@ -270,6 +270,74 @@ static void test_parse_array() {
     tinyjson_free(&v);
 }
 
+
+static void test_parse_object(){
+    tinyjson_value v;
+    size_t i;
+    init(&v);
+    EXPECT_EQ_INT(PARSE_OK, parse(&v,"{ }"));
+    EXPECT_EQ_INT(tinyjson_OBJECT, get_type(&v));
+    EXPECT_EQ_SIZE_T(0, get_object_size(&v));
+    tinyjson_free(&v);
+
+    init(&v);
+    EXPECT_EQ_INT(PARSE_OK, parse(&v,
+        " { "
+        "\"n\" : null , "
+        "\"f\" : false , "
+        "\"t\" : true , "
+        "\"i\" : 123 , "
+        "\"s\" : \"abc\", "
+        "\"a\" : [ 1, 2, 3 ],"
+        "\"o\" : { \"1\" : 1, \"2\" : 2, \"3\" : 3 }"
+        " } "
+    ));
+    EXPECT_EQ_INT(tinyjson_OBJECT, get_type(&v));
+    EXPECT_EQ_SIZE_T(7, get_object_size(&v));
+    EXPECT_EQ_STRING("n",get_object_key(&v,0),get_object_key_length(&v,0));
+    EXPECT_EQ_INT(tinyjson_NULL, get_type(get_object_value(&v,0)));
+
+    EXPECT_EQ_STRING("f",get_object_key(&v,1),get_object_key_length(&v,1));
+    EXPECT_EQ_INT(tinyjson_FALSE, get_type(get_object_value(&v,1)));
+
+    EXPECT_EQ_STRING("t",get_object_key(&v,2),get_object_key_length(&v,2));
+    EXPECT_EQ_INT(tinyjson_TRUE, get_type(get_object_value(&v,2)));
+
+    EXPECT_EQ_STRING("i",get_object_key(&v,3),get_object_key_length(&v,3));
+    EXPECT_EQ_INT(tinyjson_NUMBER, get_type(get_object_value(&v,3)));
+    EXPECT_EQ_DOUBLE(123.0,get_number(get_object_value(&v,3)));
+
+    EXPECT_EQ_STRING("s",get_object_key(&v,4),get_object_key_length(&v,4));
+    EXPECT_EQ_INT(tinyjson_STRING, get_type(get_object_value(&v,4)));
+    EXPECT_EQ_STRING("abc",get_string(get_object_value(&v,4)),get_string_length(get_object_value(&v,4)));
+
+    EXPECT_EQ_STRING("a",get_object_key(&v,5),get_object_key_length(&v,5));
+    EXPECT_EQ_INT(tinyjson_ARRAY, get_type(get_object_value(&v,5)));
+    EXPECT_EQ_SIZE_T(3,get_array_size(get_object_value(&v,5)));
+    for(int i=0; i<3; i++){
+        tinyjson_value* e = get_array_element(get_object_value(&v,5),i);
+        EXPECT_EQ_INT(tinyjson_NUMBER, get_type(e));
+        EXPECT_EQ_DOUBLE(i+1.0,get_number(e));
+    }
+
+    EXPECT_EQ_STRING("o",get_object_key(&v,6),get_object_key_length(&v,6));
+    {
+        tinyjson_value *o = get_object_value(&v,6);
+        EXPECT_EQ_INT(tinyjson_OBJECT, get_type(o));
+        for(int i=0; i<3; i++){
+            tinyjson_value *ov = get_object_value(o,i);
+            EXPECT_TRUE('1'+i == get_object_key(o,i)[0]);
+            EXPECT_EQ_SIZE_T(1, get_object_key_length(o,i));
+            EXPECT_EQ_INT(tinyjson_NUMBER, get_type(ov));
+            EXPECT_EQ_DOUBLE(i+1.0,get_number(ov));
+        }
+    }
+    
+    tinyjson_free(&v);       
+
+}
+
+
 static void test_parse_miss_comma_or_square_bracket(){
     TEST_ERROR(PARSE_MISS_COMMA_OR_SQUARE_BRACKET,"[12");
     TEST_ERROR(PARSE_MISS_COMMA_OR_SQUARE_BRACKET,"[12}");
@@ -277,6 +345,33 @@ static void test_parse_miss_comma_or_square_bracket(){
     TEST_ERROR(PARSE_MISS_COMMA_OR_SQUARE_BRACKET,"[[]");
     TEST_ERROR(PARSE_MISS_COMMA_OR_SQUARE_BRACKET,"[1 2]");
 }
+
+static void test_parse_miss_key() {
+    TEST_ERROR(PARSE_MISS_KEY, "{:1,");
+    TEST_ERROR(PARSE_MISS_KEY, "{1:1,");
+    TEST_ERROR(PARSE_MISS_KEY, "{true:1,");
+    TEST_ERROR(PARSE_MISS_KEY, "{false:1,");
+    TEST_ERROR(PARSE_MISS_KEY, "{null:1,");
+    TEST_ERROR(PARSE_MISS_KEY, "{[]:1,");
+    TEST_ERROR(PARSE_MISS_KEY, "{{}:1,");
+    TEST_ERROR(PARSE_MISS_KEY, "{\"a\":1,");
+}
+
+static void test_parse_miss_colon() {
+    TEST_ERROR(PARSE_MISS_COLON, "{\"a\"}");
+    TEST_ERROR(PARSE_MISS_COLON, "{\"a\",\"b\"}");
+}
+
+static void test_parse_miss_comma_or_curly_bracket() {
+    TEST_ERROR(PARSE_MISS_COMMA_OR_CURLY_BRACKET, "{\"a\":1");
+    TEST_ERROR(PARSE_MISS_COMMA_OR_CURLY_BRACKET, "{\"a\":1]");
+    TEST_ERROR(PARSE_MISS_COMMA_OR_CURLY_BRACKET, "{\"a\":1 \"b\"");
+    TEST_ERROR(PARSE_MISS_COMMA_OR_CURLY_BRACKET, "{\"a\":{}");
+}
+
+
+
+
 
 static void test_parse() {
     test_parse_null();
@@ -289,6 +384,9 @@ static void test_parse() {
     test_parse_number_too_big();
     test_parse_string();
     test_parse_array();
+#if 0
+    test_parse_object();
+#endif
 
     test_parse_missing_quotation_mark();
     test_parse_invalid_string_escape();
@@ -297,6 +395,11 @@ static void test_parse() {
     test_parse_invalid_unicode_hex();
     test_parse_invalid_unicode_surrogate();
     test_parse_miss_comma_or_square_bracket();
+#if 0
+    test_parse_miss_key();
+    test_parse_miss_colon();
+    test_parse_miss_comma_or_curly_bracket();
+#endif
 }
 
 
