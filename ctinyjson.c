@@ -9,6 +9,10 @@
 #define PARSE_STACK_INIT_SIZE 256
 #endif
 
+#ifndef PARSE_STRINGIFY_INIT_SIZE
+#define PARSE_STRINGIFY_INIT_SIZE 256
+#endif
+
 
 #define EXPECT(c, ch)   do { assert(*c->json == (ch)); c->json++; } while(0)
 #define ISDIGIT(ch)   ((ch)>='0' && (ch)<='9')
@@ -16,6 +20,7 @@
 
 //通过赋值将ch存储在context_push函数返回的位置。
 #define PUTC(c,ch)  do{*(char*)context_push(c,sizeof(char)) = (ch); } while(0)
+#define PUTS(c,s,len) memcpy(context_push(c,len),s,len);
 
 /// @brief 
 typedef struct{
@@ -497,6 +502,86 @@ int parse(tinyjson_value *v, const char *json)
     free(c.stack); //释放内存
     return ret;
 }
+
+
+
+static stringify_string(tinyjson_context* c, const char* s, size_t len){
+    size_t i;
+    assert(s != NULL);
+    PUTC(c,'"');
+    for(int i=0; i<len; i++){
+        unsigned char ch = (unsigned char)s[i];
+        switch(ch){
+            case '\"': PUTS(c,"\\\"",2); break;
+            case '\\': PUTS(c,"\\\\",2); break;
+            case '\b': PUTS(c,"\\b",2); break;
+            case '\f': PUTS(c,"\\f",2); break;
+            case '\n': PUTS(c,"\\n",2); break;
+            case '\r': PUTS(c,"\\r",2); break;
+            case '\t': PUTS(c,"\\t",2); break;
+            default:
+                if(ch<0x20){
+                    char buf[7];
+                    sprintf(buf,"\\u%04X",ch);
+                    PUTS(c,buf,6);
+                }else{
+                    PUTC(c,s[i]);
+                }
+        }
+    }
+    PUTC(c,'"');
+}
+
+
+static void stringify_value(tinyjson_context* c, const tinyjson_value* v){
+    switch(v->type){
+        case tinyjson_NULL:
+            PUTS(c,"null",4); break;
+        case tinyjson_TRUE:
+            PUTS(c,"true",4); break;
+        case tinyjson_FALSE:
+            PUTS(c,"false",5); break;
+        case tinyjson_NUMBER:
+            c->top -= 32 - sprintf(context_push(c,32),"%.17g",v->u.n); break;
+        case tinyjson_STRING:
+            stringify_string(c,v->u.s.s,v->u.s.len);
+            break;
+        case tinyjson_ARRAY:
+            PUTC(c,'[');
+            for(int i=0; i<v->u.a.size; i++){
+                if(i>0) PUTC(c,',');
+                stringify_value(c,&v->u.a.e[i]);
+            }
+            PUTC(c,']');
+            break;
+        case tinyjson_OBJECT:
+            PUTC(c,'{');
+            for(int i=0; i<v->u.o.size; i++){
+                if(i>0) PUTC(c,',');
+                stringify_string(c,v->u.o.m[i].k,v->u.o.m[i].klen);
+                PUTC(c,':');
+                stringify_value(c,&v->u.o.m[i].v);
+            }
+            PUTC(c,'}');
+            break;
+        default:
+            assert(0 && "invalid type");
+    }
+}
+
+
+char * stringify(const tinyjson_value * v, size_t * length){
+    tinyjson_context c;
+    assert(v != NULL);
+    c.stack = (char*)malloc(c.size = PARSE_STRINGIFY_INIT_SIZE);
+    c.top=0;
+    stringify_value(&c,v);
+    if(length)
+        *length = c.top;
+    PUTC(&c,'\0');
+    return c.stack;
+}
+
 
 
 /// @brief 释放内存
