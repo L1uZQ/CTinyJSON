@@ -164,7 +164,7 @@ static void test_parse_number_too_big() {
 #define TEST_STRING(expect, json)\
     do {\
         tinyjson_value v;\
-        init(&v);\
+        tinyjson_init(&v);\
         EXPECT_EQ_INT(PARSE_OK, parse(&v, json));\
         EXPECT_EQ_INT(tinyjson_STRING, get_type(&v));\
         EXPECT_EQ_STRING(expect, get_string(&v), get_string_length(&v));\
@@ -234,13 +234,13 @@ static void test_parse_array() {
     size_t i,j;
     tinyjson_value v;
 
-    init(&v);
+    tinyjson_init(&v);
     EXPECT_EQ_INT(PARSE_OK, parse(&v, "[ ]"));
     EXPECT_EQ_INT(tinyjson_ARRAY, get_type(&v));
     EXPECT_EQ_SIZE_T(0, get_array_size(&v));
     tinyjson_free(&v);
 
-    init(&v);
+    tinyjson_init(&v);
     EXPECT_EQ_INT(PARSE_OK, parse(&v,"[ null , false ,true, 123, \"abc\"]"));
     EXPECT_EQ_INT(tinyjson_ARRAY, get_type(&v));
     EXPECT_EQ_SIZE_T(5, get_array_size(&v));
@@ -253,7 +253,7 @@ static void test_parse_array() {
     EXPECT_EQ_STRING("abc",get_string(get_array_element(&v,4)), get_string_length(get_array_element(&v,4)));
     tinyjson_free(&v);
 
-    init(&v);
+    tinyjson_init(&v);
     EXPECT_EQ_INT(PARSE_OK, parse(&v,"[ [], [0] ,[0,1], [ 0,   1, 2]]"));
     EXPECT_EQ_INT(tinyjson_ARRAY, get_type(&v));
     EXPECT_EQ_SIZE_T(4, get_array_size(&v));
@@ -274,13 +274,13 @@ static void test_parse_array() {
 static void test_parse_object(){
     tinyjson_value v;
     size_t i;
-    init(&v);
+    tinyjson_init(&v);
     EXPECT_EQ_INT(PARSE_OK, parse(&v,"{ }"));
     EXPECT_EQ_INT(tinyjson_OBJECT, get_type(&v));
     EXPECT_EQ_SIZE_T(0, get_object_size(&v));
     tinyjson_free(&v);
 
-    init(&v);
+    tinyjson_init(&v);
     EXPECT_EQ_INT(PARSE_OK, parse(&v,
         " { "
         "\"n\" : null , "
@@ -407,7 +407,7 @@ static void test_parse() {
         tinyjson_value v;\
         char* json2;\
         size_t length;\
-        init(&v);\
+        tinyjson_init(&v);\
         EXPECT_EQ_INT(PARSE_OK, parse(&v, json));\
         json2 = stringify(&v, &length);\
         EXPECT_EQ_STRING(json, json2, length);\
@@ -468,12 +468,90 @@ static void test_stringify() {
 }
 
 
+#define TEST_EQUAL(json1, json2, equality) \
+    do {\
+        tinyjson_value v1, v2;\
+        tinyjson_init(&v1);\
+        tinyjson_init(&v2);\
+        EXPECT_EQ_INT(PARSE_OK, parse(&v1, json1));\
+        EXPECT_EQ_INT(PARSE_OK, parse(&v2, json2));\
+        EXPECT_EQ_INT(equality, is_equal(&v1, &v2));\
+        tinyjson_free(&v1);\
+        tinyjson_free(&v2);\
+    } while(0)
+
+
+static void test_equal() {
+    TEST_EQUAL("true", "true", 1);
+    TEST_EQUAL("true", "false", 0);
+    TEST_EQUAL("false", "false", 1);
+    TEST_EQUAL("null", "null", 1);
+    TEST_EQUAL("null", "0", 0);
+    TEST_EQUAL("123", "123", 1);
+    TEST_EQUAL("123", "456", 0);
+    TEST_EQUAL("\"abc\"", "\"abc\"", 1);
+    TEST_EQUAL("\"abc\"", "\"abcd\"", 0);
+    TEST_EQUAL("[]", "[]", 1);
+    TEST_EQUAL("[]", "null", 0);
+    TEST_EQUAL("[1,2,3]", "[1,2,3]", 1);
+    TEST_EQUAL("[1,2,3]", "[1,2,3,4]", 0);
+    TEST_EQUAL("[[]]", "[[]]", 1);
+    TEST_EQUAL("{}", "{}", 1);
+    TEST_EQUAL("{}", "null", 0);
+    TEST_EQUAL("{}", "[]", 0);
+    TEST_EQUAL("{\"a\":1,\"b\":2}", "{\"a\":1,\"b\":2}", 1);
+    TEST_EQUAL("{\"a\":1,\"b\":2}", "{\"b\":2,\"a\":1}", 1);
+    TEST_EQUAL("{\"a\":1,\"b\":2}", "{\"a\":1,\"b\":3}", 0);
+    TEST_EQUAL("{\"a\":1,\"b\":2}", "{\"a\":1,\"b\":2,\"c\":3}", 0);
+    TEST_EQUAL("{\"a\":{\"b\":{\"c\":{}}}}", "{\"a\":{\"b\":{\"c\":{}}}}", 1);
+    TEST_EQUAL("{\"a\":{\"b\":{\"c\":{}}}}", "{\"a\":{\"b\":{\"c\":[]}}}", 0);
+}
+
+static void test_copy() {
+    tinyjson_value v1, v2;
+    tinyjson_init(&v1);
+    parse(&v1, "{\"t\":true,\"f\":false,\"n\":null,\"d\":1.5,\"a\":[1,2,3]}");
+    tinyjson_init(&v2);
+    tinyjson_copy(&v2, &v1);
+    EXPECT_TRUE(is_equal(&v2, &v1));
+    tinyjson_free(&v1);
+    tinyjson_free(&v2);
+}
+
+static void test_move() {
+	tinyjson_value v1, v2, v3;
+	tinyjson_init(&v1);
+	parse(&v1, "{\"t\":true,\"f\":false,\"n\":null,\"d\":1.5,\"a\":[1,2,3]}");
+	tinyjson_init(&v2);
+	tinyjson_copy(&v2, &v1);
+	tinyjson_init(&v3);
+	tinyjson_move(&v3, &v2);
+	EXPECT_EQ_INT(tinyjson_NULL, get_type(&v2));
+	EXPECT_TRUE(is_equal(&v3, &v1));
+	tinyjson_free(&v1);
+	tinyjson_free(&v2);
+	tinyjson_free(&v3);
+}
+
+static void test_swap() {
+	tinyjson_value v1, v2;
+	tinyjson_init(&v1);
+	tinyjson_init(&v2);
+	set_string(&v1, "Hello", 5);
+	set_string(&v2, "World!", 6);
+	tinyjson_swap(&v1, &v2);
+	EXPECT_EQ_STRING("World!", get_string(&v1), get_string_length(&v1));
+	EXPECT_EQ_STRING("Hello", get_string(&v2), get_string_length(&v2));
+	tinyjson_free(&v1);
+	tinyjson_free(&v2);
+}
+
 
 
 
 static void test_access_null() {
     tinyjson_value v;
-    init(&v);
+    tinyjson_init(&v);
     set_string(&v, "a", 1);
     set_null(&v);
     EXPECT_EQ_INT(tinyjson_NULL, get_type(&v));
@@ -482,7 +560,7 @@ static void test_access_null() {
 
 static void test_access_boolean() {
     tinyjson_value v;
-    init(&v);
+    tinyjson_init(&v);
     set_string(&v, "a", 1);
     set_boolean(&v, 1);
     EXPECT_TRUE(get_boolean(&v));
@@ -493,7 +571,7 @@ static void test_access_boolean() {
 
 static void test_access_number() {
     tinyjson_value v;
-    init(&v);
+    tinyjson_init(&v);
     set_string(&v, "a", 1);
     set_number(&v, 1234.5);
     EXPECT_EQ_DOUBLE(1234.5, get_number(&v));
@@ -502,7 +580,7 @@ static void test_access_number() {
 
 static void test_access_string() {
     tinyjson_value v;
-    init(&v);
+    tinyjson_init(&v);
     set_string(&v, "", 0);
     EXPECT_EQ_STRING("", get_string(&v), get_string_length(&v));
     set_string(&v, "Hello", 5);
@@ -510,18 +588,223 @@ static void test_access_string() {
     tinyjson_free(&v);
 }
 
+static void test_access_array() {
+	tinyjson_value a, e;
+	size_t i, j;
+
+	tinyjson_init(&a);
+
+	for (j = 0; j <= 5; j += 5) {
+
+		set_array(&a, j);
+		//printf("**************%d\n", j);// 0 5
+		//printf("**************%d\n", get_array_size(&a));
+		EXPECT_EQ_SIZE_T(0, get_array_size(&a));
+		EXPECT_EQ_SIZE_T(j, get_array_capacity(&a));
+		for (i = 0; i < 10; i++) {
+			tinyjson_init(&e);
+			set_number(&e, i);
+			tinyjson_move(pushback_array_element(&a), &e);
+			tinyjson_free(&e);
+		}
+
+		EXPECT_EQ_SIZE_T(10, get_array_size(&a));
+		for (i = 0; i < 10; i++)
+			EXPECT_EQ_DOUBLE((double)i, get_number(get_array_element(&a, i)));
+	}
+	//printf("**************%d\n", get_array_size(&a));
+
+
+	popback_array_element(&a);
+	EXPECT_EQ_SIZE_T(9, get_array_size(&a));
+	for (i = 0; i < 9; i++)
+		EXPECT_EQ_DOUBLE((double)i, get_number(get_array_element(&a, i)));
+
+	erase_array_element(&a, 4, 0);
+	EXPECT_EQ_SIZE_T(9, get_array_size(&a));
+	for (i = 0; i < 9; i++)
+		EXPECT_EQ_DOUBLE((double)i, get_number(get_array_element(&a, i)));
+
+	erase_array_element(&a, 8, 1);
+	EXPECT_EQ_SIZE_T(8, get_array_size(&a));
+	for (i = 0; i < 8; i++)
+		EXPECT_EQ_DOUBLE((double)i, get_number(get_array_element(&a, i)));
+
+	erase_array_element(&a, 0, 2);
+	EXPECT_EQ_SIZE_T(6, get_array_size(&a));
+	for (i = 0; i < 6; i++)
+		EXPECT_EQ_DOUBLE((double)i + 2, get_number(get_array_element(&a, i)));
+
+#if 1
+	for (i = 0; i < 2; i++) {
+		tinyjson_init(&e);
+		set_number(&e, i);
+		tinyjson_move(insert_array_element(&a, i), &e);
+		tinyjson_free(&e);
+	}
+#endif
+
+	EXPECT_EQ_SIZE_T(8, get_array_size(&a));
+	for (i = 0; i < 8; i++)
+		EXPECT_EQ_DOUBLE((double)i, get_number(get_array_element(&a, i)));
+
+	EXPECT_TRUE(get_array_capacity(&a) > 8);
+	shrink_array(&a);
+	EXPECT_EQ_SIZE_T(8, get_array_capacity(&a));
+	EXPECT_EQ_SIZE_T(8, get_array_size(&a));
+	for (i = 0; i < 8; i++)
+		EXPECT_EQ_DOUBLE((double)i, get_number(get_array_element(&a, i)));
+
+	set_string(&e, "Hello", 5);
+	tinyjson_move(pushback_array_element(&a), &e);     /* Test if element is freed */
+	tinyjson_free(&e);
+
+	i = get_array_capacity(&a);
+	clear_array(&a);
+	EXPECT_EQ_SIZE_T(0, get_array_size(&a));
+	EXPECT_EQ_SIZE_T(i, get_array_capacity(&a));   /* capacity remains unchanged */
+	shrink_array(&a);
+	EXPECT_EQ_SIZE_T(0, get_array_capacity(&a));
+
+	tinyjson_free(&a);
+}
+
+static void test_access_object() {
+#if 1
+	tinyjson_value o, v, * pv;
+	size_t i, j, index;
+
+	tinyjson_init(&o);
+	for (j = 0; j <= 5; j += 5) {
+		//printf("**************%d\n", j);// 0 5
+		//printf("**************%d\n", get_object_size(&o));
+		set_object(&o, j);
+		EXPECT_EQ_SIZE_T(0, get_object_size(&o));
+		EXPECT_EQ_SIZE_T(j, get_object_capacity(&o));
+		for (i = 0; i < 10; i++) {
+			char key[2] = "a";
+			key[0] += i;// a b c d e f g h i j 
+			tinyjson_init(&v);
+			set_number(&v, i);
+            tinyjson_value *temp = set_object_value(&o, key, 1);
+            printf("11111111:%x\n",temp->type);
+            tinyjson_move(temp, &v);
+			// tinyjson_move(set_object_value(&o, key, 1), &v);
+			tinyjson_free(&v);
+		}
+		EXPECT_EQ_SIZE_T(10, get_object_size(&o));
+		for (i = 0; i < 10; i++) {
+			char key[] = "a";
+			key[0] += i;
+			index = find_object_index(&o, key, 1);
+			EXPECT_TRUE(index != KEY_NOT_EXIST);
+			pv = get_object_value(&o, index);
+			EXPECT_EQ_DOUBLE((double)i, get_number(pv));
+		}
+	}
+
+	//for (i = 0; i < 10; i++) {
+	//	char key[] = "a";
+	//	key[0] += i;
+	//	printf("key********%s\n", key);
+	//	printf("index######%d\n", find_object_index(&o, key, 1));
+	//	printf("value******%d\n", get_object_value(&o, i)->type);
+	//	printf("number-----%f\n", get_number(get_object_value(&o, find_object_index(&o, key, 1))));
+	//}
+
+	index = find_object_index(&o, "j", 1);
+	//printf("%d\n", KEY_NOT_EXIST);   -1
+	EXPECT_TRUE(index != KEY_NOT_EXIST);
+	remove_object_value(&o, index);
+	index = find_object_index(&o, "j", 1);
+	EXPECT_TRUE(index == KEY_NOT_EXIST);
+	EXPECT_EQ_SIZE_T(9, get_object_size(&o));  // abcdefghi
+
+	//for (i = 0; i < 9; i++) {
+	//	char key[] = "a";
+	//	key[0] += i;
+	//	printf("key********%s\n", key);
+	//	printf("index######%d\n", find_object_index(&o, key, 1));
+	//	printf("value******%d\n", get_object_value(&o, i)->type);
+	//	printf("number-----%f\n", get_number(get_object_value(&o, find_object_index(&o, key, 1))));
+	//}
+
+	index = find_object_index(&o, "a", 1);
+	EXPECT_TRUE(index != KEY_NOT_EXIST);
+	remove_object_value(&o, index);
+	index = find_object_index(&o, "a", 1);
+	EXPECT_TRUE(index == KEY_NOT_EXIST);
+	EXPECT_EQ_SIZE_T(8, get_object_size(&o)); // bcdefghi
+
+	//for (i = 0; i < 8; i++) {
+	//	char key[] = "a";
+	//	key[0] += i+1;
+	//	printf("key********%s\n", key);
+	//	printf("index######%d\n", find_object_index(&o, key, 1));
+	//	printf("value******%d\n", get_object_value(&o, i)->type);
+	//	printf("number-----%f\n", get_number(get_object_value(&o, find_object_index(&o, key, 1))));
+	//}
+	//printf("capacity: %d\n", get_object_capacity(&o));
+	EXPECT_TRUE(get_object_capacity(&o) > 8);  // 10
+	shrink_object(&o);                         // 8
+	//printf("capacity: %d\n", get_object_capacity(&o));
+	EXPECT_EQ_SIZE_T(8, get_object_capacity(&o));
+	EXPECT_EQ_SIZE_T(8, get_object_size(&o));
+	for (i = 0; i < 8; i++) {
+		char key[] = "a";
+		key[0] += i + 1;
+		/*printf("*********%s\n", key);
+		printf("#########%d\n", find_object_index(&o, key, 1));
+		printf("*********%d\n", get_object_value(&o, i)->type);
+		printf("---------%f\n", get_number(get_object_value(&o, find_object_index(&o, key, 1))));*/
+		
+		
+		EXPECT_EQ_DOUBLE((double)i + 1, get_number(get_object_value(&o, find_object_index(&o, key, 1))));
+	}
+
+	set_string(&v, "Hello", 5);
+	tinyjson_move(set_object_value(&o, "World", 5), &v); /* Test if element is freed */
+	tinyjson_free(&v);
+
+	pv = find_object_value(&o, "World", 5);
+	EXPECT_TRUE(pv != NULL);
+	EXPECT_EQ_STRING("Hello", get_string(pv), get_string_length(pv));
+
+	i = get_object_capacity(&o);
+	clear_object(&o);
+	EXPECT_EQ_SIZE_T(0, get_object_size(&o));
+	EXPECT_EQ_SIZE_T(i, get_object_capacity(&o)); /* capacity remains unchanged */
+	shrink_object(&o);
+	EXPECT_EQ_SIZE_T(0, get_object_capacity(&o));
+
+	tinyjson_free(&o);
+#endif
+}
+
+
+
+
 
 static void test_access(){
     test_access_null();
     test_access_boolean();
     test_access_number();
     test_access_string();
+    test_access_array();
+	test_access_object();
 }
 
 
 int main() {
     test_parse();
     test_access();
+    test_stringify();
+
+	test_equal();
+	test_copy();
+	test_move();
+	test_swap();
+
     printf("%d/%d (%3.2f%%) passed\n", test_pass, test_count, test_pass * 100.0 / test_count);
     return main_ret;
 }

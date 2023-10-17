@@ -350,7 +350,7 @@ static int parse_array(tinyjson_context * c, tinyjson_value * v){
     }
     for(;;){
         tinyjson_value e;
-        init(&e);
+        tinyjson_init(&e);
         if((ret = parse_value(c,&e)) != PARSE_OK)
             return ret;
         memcpy(context_push(c,sizeof(tinyjson_value)),&e,sizeof(tinyjson_value));
@@ -368,7 +368,7 @@ static int parse_array(tinyjson_context * c, tinyjson_value * v){
             memcpy(v->u.a.e = (tinyjson_value*)malloc(size), context_pop(c,size),size);
             return PARSE_OK;
         }
-        else  {
+        else{
            ret = PARSE_MISS_COMMA_OR_SQUARE_BRACKET;
            break;
         }
@@ -400,7 +400,7 @@ static int parse_object(tinyjson_context * c, tinyjson_value * v){
     size=0;
     for(;;){
         char *str;
-        init(&m.v);
+        tinyjson_init(&m.v);
         if(*c->json != '"'){
             ret = PARSE_MISS_KEY;
             break;
@@ -489,7 +489,7 @@ int parse(tinyjson_value *v, const char *json)
     c.json = json; //方便后面传参数
     c.stack = NULL;
     c.size = c.top = 0;
-    init(v);
+    tinyjson_init(v);
     // v->type = tinyjson_NULL;
     parse_whitespace(&c);
     if((ret=parse_value(&c,v)) == PARSE_OK){
@@ -582,6 +582,64 @@ char * stringify(const tinyjson_value * v, size_t * length){
     return c.stack;
 }
 
+tinyjson_value* find_object_value(tinyjson_value* v, const char* key, size_t klen);
+tinyjson_value* set_object_value(tinyjson_value* v, const char* key, size_t klen);
+
+void tinyjson_copy(tinyjson_value* dst, const tinyjson_value* src) {
+    assert(src != NULL && dst != NULL && src != dst);
+    size_t i;
+    switch (src->type) {
+        case tinyjson_STRING:
+            set_string(dst, src->u.s.s, src->u.s.len);
+            break;
+        case tinyjson_ARRAY:
+            /* \todo */
+            set_array(dst, src->u.a.size);
+            // 逐个拷贝
+			for (i = 0; i < src->u.a.size; i++) {
+				tinyjson_copy(&dst->u.a.e[i], &src->u.a.e[i]);
+			}
+			dst->u.a.size = src->u.a.size;
+            break;
+        case tinyjson_OBJECT:
+            /* \todo */
+            set_object(dst, src->u.o.size);
+			// 逐个拷贝, 先key后value
+			for (i = 0; i < src->u.o.size; i++) {
+				//k
+				// 设置k字段为key的对象的值，如果在查找过程中找到了已经存在key，则返回；否则新申请一块空间并初始化，然后返回
+				tinyjson_value* val = set_object_value(dst, src->u.o.m[i].k, src->u.o.m[i].klen);
+				//v
+				tinyjson_copy(val, &src->u.o.m[i].v);
+			}
+			dst->u.o.size = src->u.o.size;            
+            break;
+        default:
+            tinyjson_free(dst);
+            memcpy(dst, src, sizeof(tinyjson_value));
+            break;
+    }
+}
+
+void tinyjson_move(tinyjson_value* dst, tinyjson_value* src) {
+    assert(dst != NULL && src != NULL && src != dst);
+    printf("测试测试\n");
+    tinyjson_free(dst);
+    printf("测试测试2\n");
+    memcpy(dst, src, sizeof(tinyjson_value));
+    tinyjson_init(src);
+}
+
+void tinyjson_swap(tinyjson_value* lhs, tinyjson_value* rhs) {
+    assert(lhs != NULL && rhs != NULL);
+    if (lhs != rhs) {
+        tinyjson_value temp;
+        memcpy(&temp, lhs, sizeof(tinyjson_value));
+        memcpy(lhs,   rhs, sizeof(tinyjson_value));
+        memcpy(rhs, &temp, sizeof(tinyjson_value));
+    }
+}
+
 
 
 /// @brief 释放内存
@@ -621,6 +679,48 @@ tinyjson_type get_type(const tinyjson_value *v){
     assert(v != NULL);
     return v->type;
 }
+
+//前向声明
+size_t find_object_index(const tinyjson_value* v, const char* key, size_t klen);
+
+int is_equal(tinyjson_value* lhs,tinyjson_value* rhs) {
+    size_t i;
+    assert(lhs != NULL && rhs != NULL);
+    if (lhs->type != rhs->type)
+        return 0;
+    switch (lhs->type) {
+        case tinyjson_STRING:
+            return lhs->u.s.len == rhs->u.s.len && 
+                memcmp(lhs->u.s.s, rhs->u.s.s, lhs->u.s.len) == 0;
+        case tinyjson_NUMBER:
+            return lhs->u.n == rhs->u.n;
+        case tinyjson_ARRAY:
+            if (lhs->u.a.size != rhs->u.a.size)
+                return 0;
+            for (i = 0; i < lhs->u.a.size; i++)
+                if (!is_equal(&lhs->u.a.e[i], &rhs->u.a.e[i]))
+                    return 0;
+            return 1;
+        case tinyjson_OBJECT:
+            /* \todo */
+			// 对于对象，先比较键值对个数是否一样
+			// 一样的话，对左边的键值对，依次在右边进行寻找
+			if (lhs->u.o.size != rhs->u.o.size)
+				return 0;
+			/* key-value comp */
+			for (i = 0; i < lhs->u.o.size; i++) {
+				size_t index = find_object_index(rhs, lhs->u.o.m[i].k, lhs->u.o.m[i].klen);
+				if (index == KEY_NOT_EXIST) { 
+					return 0; 
+				}//key not exist
+				if (!is_equal(&lhs->u.o.m[i].v, &rhs->u.o.m[index].v)) return 0; //value not match
+			}                        
+            return 1;
+        default:
+            return 1;
+    }
+}
+
 
 /// @brief 获取数字
 /// @param v 
@@ -678,15 +778,100 @@ void set_string(tinyjson_value * v, const char * s, size_t len){
     v->type = tinyjson_STRING;
 }
 
+
+void set_array(tinyjson_value* v, size_t capacity) {
+    assert(v != NULL);
+    tinyjson_free(v);
+    v->type = tinyjson_ARRAY;
+    v->u.a.size = 0;
+    v->u.a.capacity = capacity;
+    v->u.a.e = capacity > 0 ? (tinyjson_value*)malloc(capacity * sizeof(tinyjson_value)) : NULL;
+}
+
 size_t get_array_size(const tinyjson_value * v){
     assert(v!=NULL && v->type == tinyjson_ARRAY);
     return v->u.a.size;
 }
 
+size_t get_array_capacity(const tinyjson_value* v) {
+    assert(v != NULL && v->type == tinyjson_ARRAY);
+    return v->u.a.capacity;
+}
+
+void reserve_array(tinyjson_value* v, size_t capacity) {
+    assert(v != NULL && v->type == tinyjson_ARRAY);
+    if (v->u.a.capacity < capacity) {
+        v->u.a.capacity = capacity;
+        v->u.a.e = (tinyjson_value*)realloc(v->u.a.e, capacity * sizeof(tinyjson_value));
+    }
+}
+
+void shrink_array(tinyjson_value* v) {
+    assert(v != NULL && v->type == tinyjson_ARRAY);
+    if (v->u.a.capacity > v->u.a.size) {
+        v->u.a.capacity = v->u.a.size;
+        v->u.a.e = (tinyjson_value*)realloc(v->u.a.e, v->u.a.capacity * sizeof(tinyjson_value));
+    }
+}
+
+void clear_array(tinyjson_value* v) {
+    assert(v != NULL && v->type == tinyjson_ARRAY);
+    erase_array_element(v, 0, v->u.a.size);
+}
+
+
 tinyjson_value* get_array_element(const tinyjson_value * v, size_t index){
     assert(v != NULL && v->type == tinyjson_ARRAY);
     assert(index < v->u.a.size);
     return &v->u.a.e[index];
+}
+
+tinyjson_value* pushback_array_element(tinyjson_value* v) {
+    assert(v != NULL && v->type == tinyjson_ARRAY);
+    if (v->u.a.size == v->u.a.capacity)
+        reserve_array(v, v->u.a.capacity == 0 ? 1 : v->u.a.capacity * 2);
+    tinyjson_init(&v->u.a.e[v->u.a.size]);
+    return &v->u.a.e[v->u.a.size++];
+}
+
+void popback_array_element(tinyjson_value* v) {
+    assert(v != NULL && v->type == tinyjson_ARRAY && v->u.a.size > 0);
+    tinyjson_free(&v->u.a.e[--v->u.a.size]);
+}
+
+tinyjson_value* insert_array_element(tinyjson_value* v, size_t index) {
+    assert(v != NULL && v->type == tinyjson_ARRAY && index <= v->u.a.size);
+    /* \todo */
+	if (v->u.a.size == v->u.a.capacity){
+		reserve_array(v, v->u.a.capacity == 0 ? 1 : (v->u.a.size << 1)); //扩容为原来一倍
+	}
+	memcpy(&v->u.a.e[index + 1], &v->u.a.e[index], (v->u.a.size - index) * sizeof(tinyjson_value));
+	tinyjson_init(&v->u.a.e[index]);
+	v->u.a.size++;
+	return &v->u.a.e[index];
+}
+
+void erase_array_element(tinyjson_value* v, size_t index, size_t count) {
+    assert(v != NULL && v->type == tinyjson_ARRAY && index + count <= v->u.a.size);
+    /* \todo */
+	size_t i;
+	for (i = index; i < index + count; i++) {
+		tinyjson_free(&v->u.a.e[i]);
+	}
+	memcpy(v->u.a.e + index, v->u.a.e + index + count, (v->u.a.size - index - count) * sizeof(tinyjson_value));
+	for (i = v->u.a.size - count; i < v->u.a.size; i++)
+		tinyjson_init(&v->u.a.e[i]);
+	v->u.a.size -= count;    
+}
+
+
+void set_object(tinyjson_value* v, size_t capacity) {
+	assert(v != NULL);
+	tinyjson_free(v);
+	v->type = tinyjson_OBJECT;
+	v->u.o.size = 0;
+	v->u.o.capacity = capacity;
+	v->u.o.m = capacity > 0 ? (tinyjson_member*)malloc(capacity * sizeof(tinyjson_member)) : NULL;
 }
 
 size_t get_object_size(const tinyjson_value* v){
@@ -710,4 +895,106 @@ tinyjson_value * get_object_value(const tinyjson_value* v, size_t index){
     assert(v != NULL && v->type == tinyjson_OBJECT);
     assert(index < v->u.o.size);
     return &v->u.o.m[index].v;
+}
+
+size_t get_object_capacity(const tinyjson_value* v) {
+    assert(v != NULL && v->type == tinyjson_OBJECT);
+    /* \todo */
+    return v->u.o.capacity;
+    return 0;
+}
+
+void reserve_object(tinyjson_value* v, size_t capacity) {
+    assert(v != NULL && v->type == tinyjson_OBJECT);
+    /* \todo */
+    // 重置容量, 比原来大。
+	if (v->u.o.capacity < capacity) {
+		v->u.o.capacity = capacity;
+		v->u.o.m = (tinyjson_member*)realloc(v->u.o.m, capacity * sizeof(tinyjson_member));
+	}
+}
+
+void shrink_object(tinyjson_value* v) {
+    assert(v != NULL && v->type == tinyjson_OBJECT);
+    /* \todo */
+    // 收缩容量到刚好符合大小
+	if (v->u.o.capacity > v->u.o.size) {
+		v->u.o.capacity = v->u.o.size;
+		v->u.o.m = (tinyjson_member*)realloc(v->u.o.m, v->u.o.capacity * sizeof(tinyjson_member));
+	}
+}
+
+void clear_object(tinyjson_value* v) {
+    assert(v != NULL && v->type == tinyjson_OBJECT);
+    /* \todo */
+    // 清空对象
+	size_t i;
+	for (i = 0; i < v->u.o.size; i++) {
+		//回收k和v空间
+		free(v->u.o.m[i].k);
+		v->u.o.m[i].k = NULL;
+		v->u.o.m[i].klen = 0;
+		tinyjson_free(&v->u.o.m[i].v);
+	}
+	v->u.o.size = 0;
+}
+
+size_t find_object_index(const tinyjson_value* v, const char* key, size_t klen) {
+    size_t i;
+    assert(v != NULL && v->type == tinyjson_OBJECT && key != NULL);
+    for (i = 0; i < v->u.o.size; i++)
+        if (v->u.o.m[i].klen == klen && memcmp(v->u.o.m[i].k, key, klen) == 0)
+            return i;
+    return KEY_NOT_EXIST;
+}
+
+tinyjson_value* find_object_value(tinyjson_value* v, const char* key, size_t klen) {
+    size_t index = find_object_index(v, key, klen);
+    return index != KEY_NOT_EXIST ? &v->u.o.m[index].v : NULL;
+}
+
+tinyjson_value* set_object_value(tinyjson_value* v, const char* key, size_t klen) {
+    assert(v != NULL && v->type == tinyjson_OBJECT && key != NULL);
+	/* \todo */
+	size_t i, index;
+	index = find_object_index(v, key, klen);
+	if (index != KEY_NOT_EXIST)
+		return &v->u.o.m[index].v;
+	//key not exist, then we make room and tinyjson_init
+	if (v->u.o.size == v->u.o.capacity) {
+		reserve_object(v, v->u.o.capacity == 0 ? 1 : (v->u.o.capacity << 1));
+	}
+	i = v->u.o.size;
+	v->u.o.m[i].k = (char*)malloc((klen + 1));
+	memcpy(v->u.o.m[i].k, key, klen);
+	v->u.o.m[i].k[klen] = '\0';
+	v->u.o.m[i].klen = klen;
+    // v->u.o.m[i].v.type=tinyjson_NULL;
+	tinyjson_init(&v->u.o.m[i].v);
+	v->u.o.size++;
+    printf("测试set_object_value：%d\n",v->u.o.m[i].v.type);
+	return &(v->u.o.m[i].v);
+}
+
+void remove_object_value(tinyjson_value* v, size_t index) {
+    assert(v != NULL && v->type == tinyjson_OBJECT && index < v->u.o.size);
+    	/* \todo */
+	free(v->u.o.m[index].k);
+	tinyjson_free(&v->u.o.m[index].v);
+	//think like a list
+	memcpy(v->u.o.m + index, v->u.o.m + index + 1, (v->u.o.size - index - 1) * sizeof(tinyjson_member));   // 这里原来有错误
+	// 原来的size比如是10，最多其实只能访问下标为9
+	// 删除一个元素，再进行挪移，原来为9的地方要清空
+	// 现在先将size--，则size就是9
+	v->u.o.m[--v->u.o.size].k = NULL;  
+	v->u.o.m[v->u.o.size].klen = 0;
+	tinyjson_init(&v->u.o.m[v->u.o.size].v);
+	// 
+	// 错误，因为无法访问原来的size下标
+	//v->u.o.m[v->u.o.size].k = NULL;
+	//printf("v->u.o.size：  %d\n", v->u.o.size);
+	//printf("v->u.o.m[v->u.o.size]：  %s\n", v->u.o.m[v->u.o.size]);
+	//printf("v->u.o.m[v->u.o.size].klen： %d\n", v->u.o.m[v->u.o.size].klen);
+	//v->u.o.m[v->u.o.size].klen = 0;
+	//tinyjson_init(&v->u.o.m[--v->u.o.size].v);
 }

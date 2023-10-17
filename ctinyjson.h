@@ -8,6 +8,8 @@ typedef enum{
                 tinyjson_STRING,tinyjson_ARRAY,tinyjson_OBJECT
 }tinyjson_type;
 
+#define KEY_NOT_EXIST ((size_t)-1)
+
 typedef struct tinyjson_value tinyjson_value;
 typedef struct tinyjson_member tinyjson_member;
 
@@ -17,8 +19,8 @@ struct tinyjson_value{
     /// @brief 一个值不可能同时为字符串和数字，因此用union定义节省内存
     union{
         struct {char *s; size_t len;}s; //字符串
-        struct {tinyjson_value *e; size_t size}a; //数组
-        struct {tinyjson_member *m; size_t size}o;
+        struct {tinyjson_value *e; size_t size, capacity;}a; //数组
+        struct {tinyjson_member *m; size_t size, capacity;}o;
         double n;
     }u; 
     tinyjson_type type;
@@ -50,10 +52,17 @@ enum {
 };
 
 #define set_null(v) tinyjson_free(v)
-#define init(v) do { (v)->type = tinyjson_NULL; } while(0)
+#define tinyjson_init(v) do { (v)->type = tinyjson_NULL; } while(0)
 
 int parse(tinyjson_value* v, const char* json);
 char* stringify(const tinyjson_value* v, size_t* length);
+
+void tinyjson_copy(tinyjson_value* dst,const tinyjson_value* src);
+void tinyjson_move(tinyjson_value* dst,tinyjson_value* src);
+void tinyjson_swap(tinyjson_value* lhs,tinyjson_value* rhs);
+int is_equal(tinyjson_value* lhs,tinyjson_value* rhs);
+
+
 void tinyjson_free(tinyjson_value* v);
 
 
@@ -71,6 +80,18 @@ void set_string(tinyjson_value* v, const char* s, size_t len);
 
 size_t get_array_size(const tinyjson_value* v);
 tinyjson_value* get_array_element(const tinyjson_value* v, size_t index);
+void set_array(tinyjson_value* v, size_t capacity);
+size_t get_array_capacity(const tinyjson_value* v);
+void reserve_array(tinyjson_value* v, size_t capacity);
+void shrink_array(tinyjson_value* v);
+void clear_array(tinyjson_value* v);
+tinyjson_value* pushback_array_element(tinyjson_value* v);
+void popback_array_element(tinyjson_value* v);
+tinyjson_value* insert_array_element(tinyjson_value* v, size_t index);
+void erase_array_element(tinyjson_value* v, size_t index, size_t count);
+
+
+
 
 size_t get_object_size(const tinyjson_value* v);
 const char* get_object_key(const tinyjson_value* v, size_t index);
