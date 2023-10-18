@@ -623,9 +623,9 @@ void tinyjson_copy(tinyjson_value* dst, const tinyjson_value* src) {
 
 void tinyjson_move(tinyjson_value* dst, tinyjson_value* src) {
     assert(dst != NULL && src != NULL && src != dst);
-    printf("测试测试\n");
+    // printf("测试测试\n");
     tinyjson_free(dst);
-    printf("测试测试2\n");
+    // printf("测试测试2\n");
     memcpy(dst, src, sizeof(tinyjson_value));
     tinyjson_init(src);
 }
@@ -972,8 +972,10 @@ tinyjson_value* set_object_value(tinyjson_value* v, const char* key, size_t klen
     // v->u.o.m[i].v.type=tinyjson_NULL;
 	tinyjson_init(&v->u.o.m[i].v);
 	v->u.o.size++;
-    printf("测试set_object_value：%d\n",v->u.o.m[i].v.type);
-	return &(v->u.o.m[i].v);
+    // printf("测试set_object_value：%d\n",v->u.o.m[i].v.type);
+	// return &(v->u.o.m[i].v);
+    // return &(v->u.o.m[i].v);
+    return &(v->u.o.m[i].v);
 }
 
 void remove_object_value(tinyjson_value* v, size_t index) {

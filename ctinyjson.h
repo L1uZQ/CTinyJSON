@@ -97,6 +97,6 @@ size_t get_object_size(const tinyjson_value* v);
 const char* get_object_key(const tinyjson_value* v, size_t index);
 size_t get_object_key_length(const tinyjson_value* v, size_t index);
 tinyjson_value* get_object_value(const tinyjson_value* v, size_t index);
-
-
+tinyjson_value* set_object_value(tinyjson_value* v, const char* key, size_t klen);
+tinyjson_value* find_object_value(tinyjson_value* v, const char* key, size_t klen);
 #endif

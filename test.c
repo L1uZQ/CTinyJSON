@@ -686,9 +686,9 @@ static void test_access_object() {
 			key[0] += i;// a b c d e f g h i j 
 			tinyjson_init(&v);
 			set_number(&v, i);
-            tinyjson_value *temp = set_object_value(&o, key, 1);
-            printf("11111111:%x\n",temp->type);
-            tinyjson_move(temp, &v);
+            // tinyjson_value *temp = set_object_value(&o, key, 1);
+            // printf("11111111:%x\n",temp->type);
+            tinyjson_move(set_object_value(&o, key, 1), &v);
 			// tinyjson_move(set_object_value(&o, key, 1), &v);
 			tinyjson_free(&v);
 		}
