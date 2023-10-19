@@ -4,6 +4,7 @@
 #include<errno.h>
 #include<math.h>
 #include<string.h>
+#include <stdio.h>
 
 #ifndef PARSE_STACK_INIT_SIZE
 #define PARSE_STACK_INIT_SIZE 256
@@ -253,7 +254,7 @@ static int parse_string_raw(tinyjson_context* c, char** str, size_t* len){
 }
 
 
-static parse_string(tinyjson_context* c, tinyjson_value* v){
+static int parse_string(tinyjson_context* c, tinyjson_value* v){
     int ret;
     char *s;
     size_t len;
@@ -505,7 +506,7 @@ int parse(tinyjson_value *v, const char *json)
 
 
 
-static stringify_string(tinyjson_context* c, const char* s, size_t len){
+static void stringify_string(tinyjson_context* c, const char* s, size_t len){
     size_t i;
     assert(s != NULL);
     PUTC(c,'"');

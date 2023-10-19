@@ -92,11 +92,17 @@ void erase_array_element(tinyjson_value* v, size_t index, size_t count);
 
 
 
-
+void set_object(tinyjson_value * v, size_t capacity);
 size_t get_object_size(const tinyjson_value* v);
+size_t get_object_capacity(const tinyjson_value* v);
 const char* get_object_key(const tinyjson_value* v, size_t index);
 size_t get_object_key_length(const tinyjson_value* v, size_t index);
 tinyjson_value* get_object_value(const tinyjson_value* v, size_t index);
 tinyjson_value* set_object_value(tinyjson_value* v, const char* key, size_t klen);
 tinyjson_value* find_object_value(tinyjson_value* v, const char* key, size_t klen);
+size_t find_object_index(const tinyjson_value* v, const char* key, size_t klen);
+
+void remove_object_value(tinyjson_value* v, size_t index);
+void shrink_object(tinyjson_value* v);
+void clear_object(tinyjson_value* v);
 #endif
